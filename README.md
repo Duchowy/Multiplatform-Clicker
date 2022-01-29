@@ -1,2 +1,2 @@
-# Windows-Clicker
-Simple clicker for W7+
+# Multiplatform-Clicker
+Simple clicker made in Allegro engine.
