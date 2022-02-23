@@ -4,13 +4,13 @@
 #include <allegro5/allegro_primitives.h>
 #include <allegro5/allegro_image.h>
 #include <stdio.h>
-//#include <thread>
 //#include <chrono>
 #include <fstream>
 #include <string>
 #include <iostream>
 #include <time.h>
-
+#include <random>
+#include <thread>
 
 
 struct playerdata{
@@ -19,5 +19,6 @@ unsigned int effort;
 int level;
 int r;
 int r_idle;
+unsigned short idlers;
 bool debug;
 };

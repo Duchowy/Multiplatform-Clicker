@@ -2,15 +2,17 @@
 
 
 void level_up(struct playerdata *,unsigned long long int*, bool*, ALLEGRO_EVENT_QUEUE*);
-void idler(struct playerdata *,int*);
+void idler(struct playerdata *,bool*,std::mt19937 *);
 void start_screen(struct playerdata *, bool*, ALLEGRO_TIMER*,ALLEGRO_EVENT_QUEUE*);
-void shop(struct playerdata *, bool*, ALLEGRO_TIMER*, ALLEGRO_EVENT_QUEUE*);
+void shop(struct playerdata *, bool*,std::mt19937 *, ALLEGRO_TIMER*, ALLEGRO_EVENT_QUEUE*);
 void click(struct playerdata *);
 
 
 //global variables
 const int window_x = 320, window_y = 400;
 const double fps = 30.0;
+
+std::vector<std::thread> threads;
 
 void init()
 {
@@ -26,14 +28,17 @@ void init()
 int main()
 {
     //INITIALIZATION
-    srand(time(NULL));
     init();
+
+    //part responsible for functions of idler
+    srand(time(NULL));
+    std::random_device randomizer;
+    std::mt19937 generator(randomizer());
 
     ALLEGRO_TIMER* timer = al_create_timer(1.0 / fps);
     ALLEGRO_EVENT_QUEUE* queue = al_create_event_queue();
     ALLEGRO_DISPLAY* disp = al_create_display(window_x, window_y);
     ALLEGRO_FONT* font = al_create_builtin_font();
-
 
     al_register_event_source(queue, al_get_keyboard_event_source());
     al_register_event_source(queue, al_get_mouse_event_source());
@@ -50,6 +55,7 @@ int main()
     player.level = 1;
     player.r = 10;
     player.r_idle = 10;
+    player.idlers = 5;
     player.debug = 0;
 
     bool savestate = 0;  //savestate switch
@@ -58,11 +64,15 @@ int main()
     ALLEGRO_BITMAP* menu_bmp = al_load_bitmap("img/main_menu.bmp");
     if (!menu_bmp) return 0;
 
-    int delay_counter = 0; //used to count the delay
-    int delay_randomised = rand()%3+1; //used for random delay before next point is added
     al_start_timer(timer);
 
     start_screen(&player,&end, timer,queue); //trigger the start sequence
+	for(int i = 0; i<player.idlers; i++)
+	{
+		threads.push_back(std::thread(idler,&player,&end,&generator));
+	}
+
+
     unsigned long long int cap = player.level*player.level*1000 + 6000;
 
     
@@ -77,14 +87,8 @@ int main()
             case ALLEGRO_EVENT_TIMER:
                 if (event.timer.source == timer)
                 {
-                    delay_counter += 1;
-                    redraw = true;
-                    if (delay_counter == (int)fps * delay_randomised) //idler mechanism
-                    {
-                        idler(&player, &delay_randomised);
-                        if (player.points >= cap) level_up(&player, &cap, &end, queue);
-                        delay_counter = 0;
-                    }
+                    redraw = true; //rewrite to accomodate multithread
+                    if (player.points >= cap) level_up(&player, &cap, &end, queue);
                 }
                 break;
             case ALLEGRO_EVENT_DISPLAY_CLOSE:
@@ -109,7 +113,7 @@ int main()
                 }
                 case ALLEGRO_KEY_ESCAPE:
                     savestate = 0;
-                    shop(&player, &end, timer, queue);
+                    shop(&player, &end,&generator, timer, queue);
                     break;
                 }
             }
@@ -151,15 +155,30 @@ int main()
     al_destroy_timer(timer);
     al_destroy_event_queue(queue);
     al_destroy_bitmap(menu_bmp);
+	for(auto &a : threads)
+	{
+		a.join();
+	}
 
     return 0;
 }
 
 
-void idler(struct playerdata * player, int*random)
+void idler(struct playerdata * player, bool*kill,std::mt19937 * generator)
 {
-        player->points += player->r_idle;
-        *random = rand() % 5 + 1;
+    std::uniform_int_distribution<unsigned short> range(2,7);
+    time_t counter = time(NULL);
+	unsigned short delay = range(*generator);
+    while(!(*kill))
+        {
+            if(time(NULL)-counter >= delay)
+            {
+                delay = range(*generator);
+                counter = time(NULL);
+                player->points += player->r_idle;
+            }
+        }
+
 }
 
 void click(struct playerdata * player)
@@ -196,8 +215,6 @@ void click(struct playerdata * player)
     if (tracker == 20) tracker = 0;
     if (entry_counter < 20) entry_counter += 1;
 }
-
-
 
 void start_screen(struct playerdata * player, bool* kill, ALLEGRO_TIMER* timer,ALLEGRO_EVENT_QUEUE* queue)
 {
@@ -305,7 +322,7 @@ void start_screen(struct playerdata * player, bool* kill, ALLEGRO_TIMER* timer,A
     al_destroy_font(font);
 }
 
-void shop(struct playerdata * player, bool* kill, ALLEGRO_TIMER* timer, ALLEGRO_EVENT_QUEUE* queue)
+void shop(struct playerdata * player, bool* kill,std::mt19937 * generator, ALLEGRO_TIMER* timer, ALLEGRO_EVENT_QUEUE* queue)
 {
     bool end = false;
     bool redraw = 1;
@@ -371,6 +388,17 @@ void shop(struct playerdata * player, bool* kill, ALLEGRO_TIMER* timer, ALLEGRO_
                             }
                             break;
                         case 2:
+                            if(player->effort < 800) NotEnough = 1;
+                            else
+                            {
+                                NotEnough = 0;
+                                if(player->idlers < 5)
+                                {
+                                    player->effort -= 800;
+                                    player->idlers +=1;
+                                    threads.push_back(std::thread(idler,player,kill,generator));
+                                }
+                            }
                             break;
                         
                         }
@@ -418,8 +446,8 @@ void shop(struct playerdata * player, bool* kill, ALLEGRO_TIMER* timer, ALLEGRO_
                 price = "Price: 500";
                 break;
             case 2:
-                desc = "Yet to be implemented!";
-                price = "Price: NULL";
+                desc = "Buy +1 idler. Owned " + std::to_string(player->idlers) + "/5";
+                price = "Price: 800";
                 break;
             }
             al_draw_text(font, al_map_rgb(255, 255, 255), window_x / 2, window_y / 2 + 50, ALLEGRO_ALIGN_CENTRE, price.c_str());
