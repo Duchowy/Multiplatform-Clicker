@@ -4,15 +4,13 @@
 void level_up(struct playerdata *,unsigned long long int*, bool*, ALLEGRO_EVENT_QUEUE*);
 void idler(struct playerdata *,bool*,std::mt19937 *);
 void start_screen(struct playerdata *, bool*, ALLEGRO_TIMER*,ALLEGRO_EVENT_QUEUE*);
-void shop(struct playerdata *, bool*,std::mt19937 *, ALLEGRO_TIMER*, ALLEGRO_EVENT_QUEUE*);
+void shop(struct playerdata *, bool*,std::mt19937 *, ALLEGRO_TIMER*, ALLEGRO_EVENT_QUEUE*,std::vector<std::thread> &);
 void click(struct playerdata *);
 
 
 //global variables
 const int window_x = 320, window_y = 400;
 const double fps = 30.0;
-
-std::vector<std::thread> threads;
 
 void init()
 {
@@ -34,6 +32,7 @@ int main()
     srand(time(NULL));
     std::random_device randomizer;
     std::mt19937 generator(randomizer());
+    std::vector<std::thread> idlers;
 
     ALLEGRO_TIMER* timer = al_create_timer(1.0 / fps);
     ALLEGRO_EVENT_QUEUE* queue = al_create_event_queue();
@@ -55,7 +54,7 @@ int main()
     player.level = 1;
     player.r = 10;
     player.r_idle = 10;
-    player.idlers = 5;
+    player.idlers = 0;
     player.debug = 0;
 
     bool savestate = 0;  //savestate switch
@@ -69,7 +68,7 @@ int main()
     start_screen(&player,&end, timer,queue); //trigger the start sequence
 	for(int i = 0; i<player.idlers; i++)
 	{
-		threads.push_back(std::thread(idler,&player,&end,&generator));
+		idlers.push_back(std::thread(idler,&player,&end,&generator));
 	}
 
 
@@ -113,7 +112,7 @@ int main()
                 }
                 case ALLEGRO_KEY_ESCAPE:
                     savestate = 0;
-                    shop(&player, &end,&generator, timer, queue);
+                    shop(&player, &end,&generator, timer, queue,std::ref(idlers));
                     break;
                 }
             }
@@ -155,7 +154,7 @@ int main()
     al_destroy_timer(timer);
     al_destroy_event_queue(queue);
     al_destroy_bitmap(menu_bmp);
-	for(auto &a : threads)
+	for(auto &a : idlers)
 	{
 		a.join();
 	}
@@ -322,7 +321,7 @@ void start_screen(struct playerdata * player, bool* kill, ALLEGRO_TIMER* timer,A
     al_destroy_font(font);
 }
 
-void shop(struct playerdata * player, bool* kill,std::mt19937 * generator, ALLEGRO_TIMER* timer, ALLEGRO_EVENT_QUEUE* queue)
+void shop(struct playerdata * player, bool* kill,std::mt19937 * generator, ALLEGRO_TIMER* timer, ALLEGRO_EVENT_QUEUE* queue,std::vector<std::thread> & idlers)
 {
     bool end = false;
     bool redraw = 1;
@@ -396,7 +395,7 @@ void shop(struct playerdata * player, bool* kill,std::mt19937 * generator, ALLEG
                                 {
                                     player->effort -= 800;
                                     player->idlers +=1;
-                                    threads.push_back(std::thread(idler,player,kill,generator));
+                                    idlers.push_back(std::thread(idler,player,kill,generator));
                                 }
                             }
                             break;
